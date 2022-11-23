@@ -6,8 +6,6 @@ MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Ivanov Ivan");
 MODULE_VERSION("0.01");
 
-char buffer[8192];
-
 int networkfs_init(void) {
   printk(KERN_INFO "Hello, World!\n");
   return 0;
