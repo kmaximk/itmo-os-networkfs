@@ -4,13 +4,23 @@
 
 С помощью модулей можно реализовать свои файловые системы, причём со стороны пользователя такая файловая система ничем не будет отличаться от [ext4](https://en.wikipedia.org/wiki/Ext4) или [NTFS](https://en.wikipedia.org/wiki/NTFS). В этом задании мы с Вами реализуем упрощённый аналог [NFS](https://en.wikipedia.org/wiki/Network_File_System): все файлы будут храниться на удалённом сервере, однако пользователь сможет пользоваться ими точно так же, как и файлами на собственном жёстком диске.
 
-> Мы рекомендуем при выполнении этого домашнего задания использовать отдельную виртуальную машину: любая ошибка может вывести всю систему из строя, и вы можете потерять ваши данные.
-
-Мы проверили работоспособность всех инструкций для дистрибутива [Ubuntu 22.04 x64](https://releases.ubuntu.com/22.04/) и ядра версии 5.15.0-53. Возможно, при использовании других дистрибутивов, вы столкнётесь с различными ошибками и особенностями, с которыми вам придётся разобраться самостоятельно.
-
 > Выполните задание в ветке `networkfs`.
 
-## Часть 1. Сервер файловой системы
+## Системные требования
+
+Мы рекомендуем при выполнении этого домашнего задания использовать отдельную виртуальную машину: любая ошибка может вывести всю систему из строя, и вы можете потерять ваши данные. Для удобной работы с ВМ рекомендуем расширение [Remote SSH](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-ssh) для Visual Studio Code.
+
+Все инструкции написаны для ядра версии 6.2.0-31 и были проверены на Ubuntu 22.04 x64. На этой же версии ядра запускаются автоматические тесты. Возможно, при использовании других дистрибутивов и версий ядра, вы столкнётесь с различными ошибками и особенностями, с которыми вам придётся разобраться самостоятельно.
+
+Чтобы установить нужное ядро на Ubuntu, выполните в терминале команду:
+
+```bash
+sudo apt install linux-image-6.2.0-31-generic
+```
+
+После этого перезагрузите вашу виртуальную машину. Убедитесь с помощью команды `uname -r`, что у вас ядро правильной версии.
+
+## Сервер файловой системы
 
 Все файлы и структура директорий хранятся на удалённом сервере. Сервер поддерживает HTTP API, документация к которому доступна [по ссылке](http://nerc.itmo.ru/teaching/os/networkfs/).
 
@@ -22,12 +32,14 @@
 
 Формат JSON предлагается использовать только для отладки, поскольку текущая реализация функции `networkfs_http_call` работает только с бинарным форматом. Однако, вы можете её доработать и реализовать собственный JSON-парсер.
 
-Для начала работы вам необходимо завести собственный бакет — пространство для хранения файлов, и получить токен для доступа к нему. Это делается следующим запросом:
-
-```sh
-$ curl https://nerc.itmo.ru/teaching/os/networkfs/v1/token/issue?json
-{"status":"SUCCESS","response":"8c6a65c8-5ca6-49d7-a33d-daec00267011"}
-```
+> [!IMPORTANT]
+>
+> Для начала работы вам необходимо завести собственный бакет — пространство для хранения файлов, и получить токен для доступа к нему. Это делается следующим запросом:
+> 
+> ```sh
+> $ curl https://nerc.itmo.ru/teaching/os/networkfs/v1/token/issue?json
+> {"status":"SUCCESS","response":"8c6a65c8-5ca6-49d7-a33d-daec00267011"}
+> ```
 
 Строка `8c6a65c8-5ca6-49d7-a33d-daec00267011` и является токеном, который необходимо передавать во все последующие запросы. Количество токенов и размер файловой системы не ограничены, однако, мы будем вынуждены ограничить пользователей в случае злоупотребления данной возможностью.
 
@@ -53,7 +65,7 @@ int64_t networkfs_http_call(
 
 Функция возвращает 0, если запрос завершён успешно; положительное число — код ошибки из документации API, если сервер вернул ошибку; отрицательное число — код ошибки из [`http.h`](http.h#L6) или `errno-base.h` (`ENOMEM`, `ENOSPC`) в случае ошибки при выполнении запроса (отсутствие подключения, сбой в сети, некорректный ответ сервера, …).
 
-## Часть 2. Знакомство с простым модулем
+## Знакомство с простым модулем
 
 Давайте научимся компилировать и подключать тривиальный модуль. Для компиляции модулей ядра нам понадобятся утилиты для сборки и заголовочные файлы. Установить их можно так:
 
@@ -63,7 +75,7 @@ $ sudo apt-get install build-essential linux-headers-`uname -r`
 
 Мы уже подготовили основу для вашего будущего модуля в файлах [`entrypoint.c`](entrypoint.c) и [`Makefile`](Makefile). Познакомьтесь с ней.
 
-Ядру для работы с модулем достаточно двух функций — одна должна инициализировать модуль, а вторая — очищать результаты его работы. Они указываются с помощью `module_init` и `module_exit`.
+Ядру для работы с модулем достаточно двух функций — одна должна инициализировать модуль, а вторая — очищать результаты его работы. Они указываются с помощью макросов `module_init` и `module_exit`.
 
 Важное отличие кода для ядра Linux от user-space-кода — в отсутствии в нём стандартной библиотеки `libc`. Например, в ней же находится функция `printf`. Мы можем печатать данные в системный лог с помощью функции [`printk`](https://www.kernel.org/doc/html/latest/core-api/printk-basics.html).
 
@@ -89,7 +101,7 @@ $ dmesg
 [  123.456789] Hello, World!
 ```
 
-Для выгрузки модуля нам понадобится команда `rmmod`:
+Для выгрузки модуля нам понадобится утилита `rmmod`. Обратите внимание, что она принимает название модуля, а не файл с модулем:
 
 ```sh
 $ sudo rmmod networkfs
@@ -98,162 +110,189 @@ $ dmesg
 [  123.987654] Goodbye!
 ```
 
-## Часть 3. Подготовка файловой системы
+## Часть 1. Инициализация файловой системы
 
-Операционная система предоставляет две функции для управления файловыми системами:
-* [`register_filesystem`](https://www.kernel.org/doc/htmldocs/filesystems/API-register-filesystem.html) — сообщает о появлении нового драйвера файловой системы
-* [`unregister_filesystem`](https://www.kernel.org/doc/htmldocs/filesystems/API-unregister-filesystem.html) — удаляет драйвер файловой системы
+Наша точка входа — функция [`register_filesystem`](https://github.com/torvalds/linux/blob/v6.2/include/linux/fs.h#L2605). Она сообщает ядру о появлении нового драйвера операционной системы.
 
-В этой части мы начнём работать с несколькими структурами ядра:
-* [`inode`](https://elixir.bootlin.com/linux/v5.15.53/source/include/linux/fs.h#L624) — описание метаданных файла: имя файла, расположение, тип файла (в нашем случае — регулярный файл или директория)
-* [`dentry`](https://elixir.bootlin.com/linux/v5.15.53/source/include/linux/dcache.h#L91) — описание директории: список `inode` внутри неё, информация о родительской директории, …
-* [`super_block`](https://elixir.bootlin.com/linux/v5.15.53/source/include/linux/fs.h#L1466) — описание всей файловой системы: информация о корневой директории, …
+Эта функция в качестве аргумента принимает указатель на структуру типа [`file_system_type`](https://github.com/torvalds/linux/blob/v6.2/include/linux/fs.h#L593). Она описывает доступные в файловой системе методы.
 
-Функции `register_filesystem` и `unregister_filesystem` принимают структуру с описанием файловой системы. Начнём с такой:
+Несколько раз в нашем коде мы будем использовать один и тот же паттерн — создадим глобальную структуру, в которой описаны наши методы, и передадим в качестве аргумента функции. Например, так:
 
 ```c
-struct file_system_type networkfs_fs_type =
-{
-	.name = "networkfs",
-	.mount = networkfs_mount,
-	.kill_sb = networkfs_kill_sb
+struct file_system_type networkfs_fs_type = {
+  .name = "networkfs"
 };
 ```
 
-Для монтирования файловой системы в этой структуре мы добавили два поля. Первое — `mount` — указатель на функцию, которая вызывается при монтировании. Например, она может выглядеть так:
+Эта конструкция создаёт константную структуру с именем `networkfs_fs_type` типа `file_system_type` и инициализирует одно поле в ней — `name` — строкой `networkfs`.
+
+Это имя мы передадим в аргумент `-t` команды [`mount`](https://linux.die.net/man/8/mount) для выбора нашей новой файловой системы.
+
+Парная функция к `register_filesystem` — [`unregister_filesystem`](https://github.com/torvalds/linux/blob/v6.2/include/linux/fs.h#L2606). Нетрудно догадаться, что она удаляет драйвер файловой системы.
+
+Обе этих функции возвращают 0, если операция завершилась успешно.
+
+> [!IMPORTANT]
+>
+> Добавьте в функции инициализации и выгрузки вашего модуля вызов соответственно функций `register_filesystem` и `unregister_filesystem`.
+>
+> При неуспешной регистрации пробросьте код ошибки в результат функции `networkfs_init`. При неуспешной выгрузке сообщите об ошибке в системный лог.
+
+Далее мы начнём работать с несколькими структурами ядра. Давайте сразу познакомимся и с ними:
+* [`inode`](https://github.com/torvalds/linux/blob/v6.2/include/linux/fs.h#L593) — описание метаданных файла: имя файла, расположение, тип файла (в нашем случае — регулярный файл или директория)
+* [`dentry`](https://github.com/torvalds/linux/blob/v6.2/include/linux/dcache.h#L82) — описание директории: список `inode` внутри неё, информация о родительской директории, …
+* [`super_block`](https://github.com/torvalds/linux/blob/v6.2/include/linux/fs.h#L1473) — описание всей файловой системы: информация о корневой директории, …
+
+Пока что написанного кода недостаточно, чтобы файловая система заработала. Сначала при монтировании файловой системы нужно[^1] инициализировать контекст файловой системы — структуру типа [`fs_context`](https://github.com/torvalds/linux/blob/v6.2/include/linux/fs_context.h#L90). Это можно сделать с помощью метода `init_fs_context`.
 
 ```c
-struct dentry* networkfs_mount(struct file_system_type *fs_type, int flags, const char *token, void *data)
-{
-	struct dentry *ret;
-	ret = mount_nodev(fs_type, flags, data, networkfs_fill_super);
-	if (ret == NULL)
-	{
-		printk(KERN_ERR "Can't mount file system");
-	}
-	else
-	{
-		printk(KERN_INFO "Mounted successfuly");
-	}
-	return ret;
+  int (*init_fs_context)(struct fs_context *);
+```
+
+Этот метод принимает вновь созданную структуру `fs_context`, и может добавить в неё некоторые поля, специфичные именно для нашей файловой системы. Нам понадобится заполнить всего одно поле — `ops` — и это ещё одна структура, типа [`fs_context_operations`](https://github.com/torvalds/linux/blob/v6.2/include/linux/fs_context.h#L115). 
+
+Нам будет достаточно всего одного метода `.get_tree` — он отвечает за инициализацию суперблока файловой системы:
+
+```c
+struct fs_context_operations networkfs_context_ops = {
+  .get_tree = networkfs_get_tree
+};
+
+int networkfs_init_fs_context(struct fs_context *fc) {
+  fc->ops = &networkfs_context_ops;
+  return 0;
 }
 ```
 
-Эта функция будет вызываться всякий раз, когда пользователь будет монтировать нашу файловую систему. Например, он может это сделать следующей командой ([документация](https://linux.die.net/man/8/mount)):
+Метод `get_tree` должен создать суперблок и записать его в контекст файловой системы. В ядре Linux уже реализовали функции для некоторых стандартных случаев — они называются `get_tree_...` в зависимости от того, каким образом будут храниться данные файловой системы. У нас нет физического раздела с данными — все файлы мы храним на сервере — поэтому нам нужна функция [`get_tree_nodev`](https://github.com/torvalds/linux/blob/v6.2/fs/super.c#L1153). Она принимает два аргумента: уже известный нам `struct fs_context*` и функцию `int fill_super(struct super_block *sb, struct fs_context *fc)`. Эта функция, в свою очередь, отвечает за инициализацию _суперблока_ нашей файловой системы — «корневую» структуру экземпляра файловой системы, которая содержит всю важную метаинформацию.
+
+В этой функции нам понадобится создать нашу первую inode — она будет отвечать за корневую директорию. Поскольку inode у нас будет много, давайте напишем удобную функцию, которая будет это делать для нас. Начнём с тривиальной реализации:
+
+```c
+/**
+ * @sb:     Суперблок файловой системы.
+ * @parent: Родительская inode (NULL для корня ФС).
+ * @mode:   Битовая маска из прав доступа и типа файла: https://github.com/torvalds/linux/blob/v6.2/include/uapi/linux/stat.h#L9.
+ * @i_ino:  Уникальный идентификатор inode.
+ */
+struct inode *networkfs_get_inode(struct super_block *sb, const struct inode *parent, umode_t mode, int i_ino) {
+  struct inode *inode;
+  inode = new_inode(sb);
+
+  if (inode != NULL) {
+  inode->i_ino = i_ino;
+    inode_init_owner(&init_user_ns, inode, parent, mode);
+  }
+
+  return inode;
+}
+```
+
+Внутри мы просто вызываем функцию [`new_inode`](https://github.com/torvalds/linux/blob/v6.2/fs/inode.c#L1040), которая создаёт пустую ноду, указываем её идентификатор (`i_ino`) и задаём права доступа функцией [`inode_init_owner`](https://github.com/torvalds/linux/blob/v6.2/fs/inode.c#L2293).
+
+Теперь можем вернуться к `fill_super` и `get_tree`:
+
+```c
+int networkfs_fill_super(struct super_block *sb, struct fs_context *fc) {
+  // Создаём корневую inode
+  struct inode *inode = networkfs_get_inode(sb, NULL, S_IFDIR, 1000);
+  // Создаём корень файловой системы
+  sb->s_root = d_make_root(inode);
+
+  if (sb->s_root == NULL) {
+    return -ENOMEM;
+  }
+
+  return 0;
+}
+
+int networkfs_get_tree(struct fs_context *fc) {
+  int ret = get_tree_nodev(fc, networkfs_fill_super);
+
+  if (ret != 0) {
+    printk(KERN_ERR "networkfs: unable to mount: error code %d", ret);
+  }
+
+  return ret;
+}
+```
+
+> На сервере номер корневой ноды всегда будет равен 1000.
+
+Наконец, для успешной работы нам нужно не только уметь монтировать файловую систему, но и отмонтировать её. Для этого в `file_system_type` предусмотрен метод `kill_sb`. Пока нам не нужно ничего дополнительно освобождать при отмонтировании ФС, поэтому давайте создадим пустую функцию и добавим её в `.kill_sb` нашей файловой системы:
+
+```c
+void networkfs_kill_sb(struct super_block *sb) {
+    printk(KERN_INFO "networkfs: superblock is destroyed");
+}
+```
+
+Последний штрих в этой части — возможность работы с различными «бакетами» на сервере. Хардкодить токен, полученный ранее, в самом коде модуля — плохая идея. Лучше дать возможность пользователю самому предоставлять токен при монтировании файловой системы. Специально для этого в команда `mount` принимает аргумент `source`. Мы его можем получить в контексте ФС в поле `fc->source`.
+
+В суперблоке для хранения произвольных данных драйвера файловой системы есть поле `s_fs_info` — в него можно записать указатель на ваши данные.
+
+> [!IMPORTANT]
+>
+> Добавьте поддержку токенов в вашу файловую систему. Вам нужно копировать токены в ваш суперблок при его инициализации и освобождать память при его уничтожении.
+>
+> Выведите токен в `kill_sb` перед его освобождением, чтобы убедиться, что вы всё сделали правильно.
+
+Самое время попробовать собрать модуль и примонтировать нашу систему:
 
 ```sh
-$ sudo mount -t networkfs <token> <path>
-```
-
-Опция `-t` нужна для указания имени файловой системы — именно оно указывается в поле `name`. Также мы передаём токен, полученный в прошлой части, и локальную директорию, в которую ФС будет примонтирована. Обратите внимание, что эта директория должна быть пуста.
-
-Мы используем функцию [`mount_nodev`](https://elixir.bootlin.com/linux/v5.15.53/source/include/linux/fs.h#L2476), поскольку наша файловая система не хранится на каком-либо физическом устройстве:
-
-```c
-struct dentry* mount_nodev(struct file_system_type *fs_type, int flags, void *data, int (*fill_super)(struct super_block *, void *, int));
-```
-
-Последний её аргумент — указатель на функцию `fill_super`. Эта функция должна заполнять структуру `super_block` информацией о файловой системе. Давайте начнём с такой функции:
-
-```c
-int networkfs_fill_super(struct super_block *sb, void *data, int silent)
-{
-	struct inode *inode;
-	inode = networkfs_get_inode(sb, NULL, S_IFDIR, 1000);
-	sb->s_root = d_make_root(inode);
-	if (sb->s_root == NULL)
-	{
-		return -ENOMEM;
-	}
-	printk(KERN_INFO "return 0\n");
-	return 0;
-}
-```
-
-Аргументы `data` и `silent` нам не понадобятся. В этой функции мы используем ещё одну (пока) неизвестную функцию — `networkfs_get_inode`. Она будет создавать новую структуру `inode`, в нашем случае — для корня файловой системы:
-
-```c
-struct inode *networkfs_get_inode(struct super_block *sb, const struct inode *dir, umode_t mode, int i_ino)
-{
-	struct inode *inode;
-	inode = new_inode(sb);
-	inode->i_ino = i_ino;
-	if (inode != NULL)
-	{
-		inode_init_owner(inode, dir, mode);
-	}
-	return inode;
-}
-```
-
-Давайте поймём, что эта функция делает. Файловой системе нужно знать, где находится корень файловой системы. Для этого в поле `s_root` мы записываем результат функции [`d_make_root`](https://elixir.bootlin.com/linux/v5.15.53/source/fs/dcache.c#L2038)), передавая ему корневую `inode`. На сервере корневая директория всегда имеет номер 1000.
-
-Для создания новой `inode` используем функцию [`new_inode`](https://elixir.bootlin.com/linux/v5.15.53/source/fs/inode.c#L961). Кроме этого, с помощью функции [`inode_init_owner`](https://elixir.bootlin.com/linux/v5.15.53/source/fs/inode.c#L2159) зададим тип ноды — укажем, что это директория.
-
-На самом деле, `umode_t` содержит битовую маску, все значения которой доступны в заголовочном файле [`linux/stat.h`](https://elixir.bootlin.com/linux/v5.15.53/source/include/uapi/linux/stat.h#L9) — она задаёт тип объекта и прва доступа.
-
-Второе поле, которое мы определили в `file_system_type` — поле `kill_sb` — указатель на функцию, которая вызывается при отмонтировании файловой системы. В нашем случае ничего делать не нужно:
-
-```c
-void networkfs_kill_sb(struct super_block *sb)
-{
-	printk(KERN_INFO "networkfs super block is destroyed. Unmount successfully.\n");
-}
-```
-
-Не забудьте зарегистрировать файловую систему в функции инициализации модуля, и удалять её при очистке модуля. Наконец, соберём и примонтируем нашу файловую систему:
-
-```sh
-$ sudo make
+$ sudo mkdir /mnt/networkfs  # Директория для монтирования должна быть пуста
+$ make
 $ sudo insmod networkfs.ko
-$ sudo mount -t networkfs 8c6a65c8-5ca6-49d7-a33d-daec00267011 /mnt/ct
+$ sudo mount -t networkfs 8c6a65c8-5ca6-49d7-a33d-daec00267011 /mnt/networkfs
 ```
 
-Если вы всё правильно сделали, ошибок возникнуть не должно. Тем не менее, перейти в директорию `/mnt/ct` не выйдет — ведь мы ещё не реализовали никаких функций для навигации по ФС.
+Если вы всё правильно сделали, ошибок возникнуть не должно. Тем не менее, перейти в директорию `/mnt/networkfs` не выйдет — ведь мы ещё не реализовали никаких функций для навигации по ФС.
 
-Теперь отмонтируем файловую систему:
+Теперь отмонтируем файловую систему — это тоже должно получиться:
 
 ```sh
-$ sudo umount /mnt/ct
+$ sudo umount /mnt/networkfs
+$ sudo dmesg  # Поищите токен тут
 ```
 
-## Часть 4. Вывод файлов и директорий
+## Часть 2. Вывод файлов и директорий
 
 > В базовой версии задания все имена файлов и директорий состоят только из латинских букв, цифр, символов подчёркивания, точек и дефисов.
 
 В прошлой части мы закончили на том, что не смогли перейти в директорию:
 
 ```sh
-$ sudo mount -t networkfs 8c6a65c8-5ca6-49d7-a33d-daec00267011 /mnt/ct
-$ cd /mnt/ct
--bash: cd: /mnt/ct: Not a directory
+$ sudo mount -t networkfs 8c6a65c8-5ca6-49d7-a33d-daec00267011 /mnt/networkfs
+$ cd /mnt/networkfs
+bash: cd: /mnt/networkfs: Not a directory
 ```
 
-Чтобы это исправить, необходимо реализовать некоторые методы для работы с `inode`. Чтобы эти методы вызывались, в поле `i_op` нужной нам ноды необходимо записать структуру [`inode_operations`](https://elixir.bootlin.com/linux/v5.15.53/source/include/linux/fs.h#L2037). Например, такую:
+Это происходит, потому что ядро не смогло найти нужную `inode` — мы её создали, но нигде её не возвращаем. В поле `i_op` каждой `inode` необходимо добавить структуру  [`inode_operations`](https://github.com/torvalds/linux/blob/v6.2/include/linux/fs.h#L2137), которая задаёт возможный набор действий с `inode`.
+
+Первый метод, который нам нужно определить — `lookup`. Функция должна по `inode` директории и `dentry` элемента в этой директории найти соответствующий `inode` файла.
+
+Пока никаких файлов у нас нет, так что начнём с тривиальной реализации:
 
 ```c
+struct dentry* networkfs_lookup(struct inode *parent, struct dentry *child, unsigned int flag) {
+  return NULL;
+}
+
 struct inode_operations networkfs_inode_ops =
 {
-	.lookup = networkfs_lookup,
+  .lookup = networkfs_lookup,
 };
 ```
 
-Первая функция, которую мы реализуем — `lookup`. Именно она позволяет операционной системе определять, что за сущность описывается данной нодой. Сигнатура функции должна быть такой:
+> [!IMPORTANT]
+>
+> Добавьте эту структуру в каждую `inode` при создании.
+
+Если мы заново попробуем повторить переход в директорию, у нас ничего не получится — но уже по другой причине:
 
 ```c
-struct dentry*
-networkfs_lookup(struct inode *parent_inode, struct dentry *child_dentry, unsigned int flag);
-```
-
-* `parent_inode` — родительская нода
-* `child_dentry` — объект, к которому мы пытаемся получить доступ
-* `flag` — неиспользуемое значение
-
-Пока ничего не будем делать: просто вернём `NULL`. Если мы заново попробуем повторить переход в директорию, у нас ничего не получится — но уже по другой причине:
-
-```c
-$ cd /mnt/ct
--bash: cd: /mnt/ct: Permission denied
+$ cd /mnt/networkfs
+-bash: cd: /mnt/networkfs: Permission denied
 ```
 
 Решите эту проблему. Пока сложной системы прав у нас не будет — у всех объектов в файловой системе могут быть права `777`. В итоге должно получиться что-то такое:
@@ -261,200 +300,165 @@ $ cd /mnt/ct
 ```sh
 $ ls -l /mnt/
 total 0
-drwxrwxrwx 1 root root 0 Oct 24 15:52 ct
+drwxrwxrwx 1 root root 0 Nov  1 13:37 networkfs
 ```
 
-После этого мы сможем перейти в `/mnt/ct`, но не можем вывести содержимое директории. На этот раз нам понадобится не `i_op`, а `i_fop` — структура типа [`file_operations`](https://elixir.bootlin.com/linux/v5.15.53/source/include/linux/fs.h#L1995). Реализуем в ней первую функцию — `iterate`.
+Теперь мы можем перейти в `/mnt/networkfs`, но не можем вывести содержимое директории. Действительно: мы нигде его не определили.
+
+Следующая структура, которую нам нужно реализовать, имеет тип [`file_operations`](https://github.com/torvalds/linux/blob/v6.2/include/linux/fs.h#L2091). Она отвечает за возможные действия с конкретной `inode`. Эта структура находится в поле `i_fop` структуры `inode`.
+
+В неё мы добавим метод `iterate` — эта функция позволяет получить список файлов в директории.
+
+Функция `iterate` должна вызывать `dir_emit` для каждого файла в директории, а также для себя и для родительской директории — `.` и `..` соответственно. Она должна начинать вывод с позиции, записанной `ctx->pos`, и инкрементировать его после каждой новой записи. В качестве возвращаемого значения нужно вернуть число выведенных файлов.
+
+Начнём с базового примера функции, которая возвращает один файл в директории `test.txt` с номером `inode` 101:
 
 ```c
+int networkfs_iterate(struct file *filp, struct dir_context *ctx) {
+  struct dentry *dentry = filp->f_path.dentry;
+  struct inode *inode = dentry->d_inode;
+
+  loff_t record_counter = 0;
+
+  while (true) {
+    switch (ctx->pos) {
+      case 0:
+        dir_emit(ctx, ".", 1, inode->i_ino, DT_DIR);
+        break;
+
+      case 1:
+        struct inode *parent_inode = dentry->d_parent->d_inode;
+        dir_emit(ctx, "..", 2, parent_inode->i_ino, DT_DIR);
+        break;
+
+      case 2:
+        dir_emit(ctx, "test.txt", strlen("test.txt"), 1001, DT_REG);
+        break;
+      
+      default:
+        return record_counter;
+    }
+
+    ++record_counter;
+    ++ctx->pos;
+  }
+}
+
 struct file_operations networkfs_dir_ops =
 {
-	.iterate = networkfs_iterate,
+  .iterate = networkfs_iterate,
 };
 ```
 
-Эта функция вызывается только для директорий и выводит список объектов в ней (нерекурсивно): для каждого объекта вызывается функция `dir_emit`, в которую передаётся имя объекта, номер ноды и его тип.
-
-Пример функции `networkfs_iterate` приведён ниже:
-
-```c
-int networkfs_iterate(struct file *filp, struct dir_context *ctx)
-{
-	char fsname[10];
-	struct dentry *dentry;
-	struct inode *inode;
-	unsigned long offset;
-	int stored;
-	unsigned char ftype;
-	ino_t ino;
-	ino_t dino;
-	dentry = filp->f_path.dentry;
-	inode = dentry->d_inode;
-	offset = filp->f_pos;
-	stored = 0;
-	ino = inode->i_ino;
-	while (true)
-	{
-		if (ino == 100)
-		{
-			if (offset == 0)
-			{
-				strcpy(fsname, ".");
-				ftype = DT_DIR;
-				dino = ino;
-			}
-			else if (offset == 1)
-			{
-				strcpy(fsname, "..");
-				ftype = DT_DIR;
-				dino = dentry->d_parent->d_inode->i_ino;
-			}
-			else if (offset == 2)
-			{
-				strcpy(fsname, "test.txt");
-				ftype = DT_REG;
-				dino = 101;
-			}
-			else
-			{
-				return stored;
-			}
-		}		
-		dir_emit(ctx, fsname, strlen(fsname), dino, ftype);
-		stored++;
-		offset++;
-		ctx->pos = offset;
-	}
-	return stored;
-}
-```
-
-Попробуем снова получить список файлов:
+Не забудьте записать полученную структуру в `i_fop`. Попробуем снова получить список файлов:
 
 ```sh
-$ ls /mnt/ct
-ls: cannot access '/mnt/ct/test.txt': No such file or directory
+$ ls /mnt/networkfs
+ls: cannot access '/mnt/networkfs/test.txt': No such file or directory
 test.txt
 ```
 
-Эта ошибка возникла из-за того, что `lookup` работает только для корневой директории — но не для файла `test.txt`. Это мы исправим в следующих частях.
+Ошибка возникла из-за того, что мы не реализовали честный `lookup`. Мы это исправим чуть позже.
 
-Вам осталось реализовать `iterate` для корневой директории с запросом к серверу.
+Для завершения этой части осталось реализовать `iterate` для корневой директории с запросом к серверу.
 
 ## Часть 5. Навигация по директориям
 
-Теперь мы хотим научиться переходить по директориям. На этом шаге функцию `networkfs_lookup` придётся немного расширить: если такой файл есть, нужно вызывать функцию `d_add`, передавая ноду файла. Например, так:
+Давайте исправим ошибку, с которой мы встретились ранее — научимся «искать» наши файлы. В функцию `lookup` передаются `inode` родительской директории и `dentry` для того файла, который мы хотим найти.
+
+Наша задача — найти (а точнее, создать) `inode` нашего файла и «добавить» его в `dentry`. Для этого существует функция [`d_add`](https://github.com/torvalds/linux/blob/v6.2/fs/dcache.c#L2811).
 
 ```c
-struct dentry *networkfs_lookup(struct inode *parent_inode, struct dentry *child_dentry, unsigned int flag)
-{
-	ino_t root;
-	struct inode *inode;
-	const char *name = child_dentry->d_name.name;
-	root = parent_inode->i_ino;
-	if (root == 100 && !strcmp(name, "test.txt"))
-	{
-		inode = networkfs_get_inode(parent_inode->i_sb, NULL, S_IFREG, 101);
-		d_add(child_dentry, inode);
-	}
-	else if (root == 100 && !strcmp(name, "dir"))
-	{
-		inode = networkfs_get_inode(parent_inode->i_sb, NULL, S_IFDIR, 200);
-		d_add(child_dentry, inode);
-	}
-	return NULL;
+struct dentry *networkfs_lookup(struct inode *parent, struct dentry *child, unsigned int flag) {
+  const char *name = child->d_name.name;
+
+  if (parent->i_ino == 1000 && !strcmp(name, "test.txt")) {
+    struct inode* inode = networkfs_get_inode(parent->i_sb, NULL, S_IFREG, 1001);
+    d_add(child, inode);
+  }
+
+  return NULL;
 }
 ```
+
+Убедитесь, что теперь ошибки при `ls` не возникает.
 
 Реализуйте навигацию по файлам и директориям, используя данные с сервера.
 
 ## Часть 6. Создание и удаление файлов
 
-Теперь научимся создавать и удалять файлы. Добавим ещё два поля в `inode_operations` — `create` и `unlink`:
+Теперь научимся создавать и удалять файлы. Добавим ещё два метода в `inode_operations` — `create` и `unlink`.
 
-Функция `networkfs_create` вызывается при создании файла и должна возвращать новую `inode` с помощью `d_add`, если создать файл получилось. Рассмотрим простой пример:
+Для того, чтобы продемонстрировать работу функций, заведём глобальную переменную `bool has_test_txt = true;` — с её помощью мы будем эмулировать удаление файла.
+
+Подправим `networkfs_iterate` и `networkfs_lookup`:
 
 ```c
-int networkfs_create(struct inode *parent_inode, struct dentry *child_dentry, umode_t mode, bool b)
-{
-	ino_t root;
-	struct inode *inode;
-	const char *name = child_dentry->d_name.name;
-	root = parent_inode->i_ino;
-	if (root == 100 && !strcmp(name, "test.txt"))
-	{
-		inode = networkfs_get_inode(parent_inode->i_sb, NULL, S_IFREG | S_IRWXUGO, 101);
-		inode->i_op = &networkfs_inode_ops;
-		inode->i_fop = NULL;
-		d_add(child_dentry, inode);
-		mask |= 1;
-	}
-	else if (root == 100 && !strcmp(name, "new_file.txt"))
-	{
-		inode = networkfs_get_inode(parent_inode->i_sb, NULL, S_IFREG | S_IRWXUGO, 102);
-		inode->i_op = &networkfs_inode_ops;
-		inode->i_fop = NULL;
-		d_add(child_dentry, inode);
-		mask |= 2;
-	}
-	return 0;
+      case 2:
+        if (has_test_txt) {
+          dir_emit(ctx, "test.txt", strlen("test.txt"), 1001, DT_REG);
+          break;
+        } else {
+          // Файлов больше нет
+          return record_counter;
+        }
+
+<...>
+
+  if (parent->i_ino == 1000 && !strcmp(name, "test.txt") && has_test_txt) {
+```
+
+Начнём с `unlink`: функция удаляет файл и возвращает 0:
+
+```c
+int networkfs_unlink(struct inode *parent, struct dentry *child) {
+  const char *name = child->d_name.name;
+
+  if (parent->i_ino == 1000 && !strcmp(name, "test.txt")) {
+    has_test_txt = false;
+  }
+ 
+  return 0;
+}
+```
+
+`create` чуть сложнее — он должен, как и `lookup`, добавлять новую `inode` с помощью функции `d_add` при успешном создании файла. Простой пример:
+
+```c
+int networkfs_create(struct user_namespace *user_ns, struct inode *parent, struct dentry *child, umode_t mode, bool b) {
+  const char *name = child_dentry->d_name.name;
+  if (parent->i_ino == 100 && !strcmp(name, "test.txt")) {
+    has_test_txt = true;
+    inode = networkfs_get_inode(parent_inode->i_sb, NULL, S_IFREG | S_IRWXUGO, 1001);
+    d_add(child_dentry, inode);
+  }
+
+  return 0;
 }
 ```
 
 Чтобы проверить, как создаются файлы, воспользуемся утилитой `touch`:
 
 ```sh
-$ touch test.txt
-$ ls
+$ ls /mnt/networkfs
 test.txt
-$ touch new_file.txt
-$ ls
-test.txt new_file.txt
-$
-```
-
-Для удаления файлов определим ещё одну функцию — `networkfs_unlink`.
-
-```c
-int networkfs_unlink(struct inode *parent_inode, struct dentry *child_dentry)
-{
-	const char *name = child_dentry->d_name.name;
-	ino_t root;
-	root = parent_inode->i_ino;
-	if (root == 100 && !strcmp(name, "test.txt"))
-	{
-		mask &= ~1;
-	}
-	else if (root == 100 && !strcmp(name, "new_file.txt"))
-	{
-		mask &= ~2;
-	}	
-	return 0;
-}
-```
-
-Теперь у нас получится выполнять и команду `rm`.
-
-```sh
-$ ls
-test.txt new_file.txt
-$ rm test.txt
-$ ls
-new_file.txt
-$ rm new_file.txt
-$ ls
+$ rm /mnt/networkfs/test.txt
+$ ls /mnt/networkfs
+$ touch /mnt/networkfs/test.txt
+$ ls /mnt/networkfs
+test.txt
 $
 ```
 
 > Обратите внимание, что утилита `touch` проверяет существование файла: для этого вызывается функция `lookup`.
 
+Вам нужно вместо использования глобального флага делать соответствующие запросы на сервер.
+
 ## Часть 7. Создание и удаление директорий
 
-Следующая (и последняя из обязательных) часть нашего задания — создание и удаление директорий. Добавим в `inode_operations` ещё два поля — `mkdir` и `rmdir`. Их сигнатуры можно найти [тут](https://elixir.bootlin.com/linux/v5.15.53/source/include/linux/fs.h#L2051).
+Следующая (и последняя из обязательных) часть нашего задания — создание и удаление директорий. Добавьте в `inode_operations` ещё два метода — `mkdir` и `rmdir`. Их сигнатуры можно найти [тут](https://github.com/torvalds/linux/blob/v6.2/include/linux/fs.h#L2137).
 
-Если мы всё сделали правильно, теперь мы сможем запустить тесты.
-
-Для запуска тестов вам понадобится Python 3 и библиотека `requests`. Запустите тесты и проверьте, что ваше решение работает:
+Если вы всё сделали правильно, теперь вы сможете запустить тесты. Для запуска тестов вам понадобится Python 3 и библиотека `requests`. Запустите тесты и проверьте, что ваше решение работает:
 
 ```sh
 $ sudo make tests
@@ -464,18 +468,19 @@ Ran 12 tests in 32.323s
 OK
 ```
 
-> Обратите внимание: пока что мы не запускаем тесты на сервере. Вам будет необходимо показать прохождение тестов преподавателю во время проверки.
-
 ## Часть 8*. Произвольные имена файлов (1 балл)
 
-> В этот раз вы можете выполнить любое количество бонусных заданий — баллы суммируются.
+> [!IMPORTANT]
+>
+> В этот раз вы можете выполнить любое количество бонусных заданий — баллы суммируются. 
+> Вместе с тем, все тесты всё ещё нужно сдавать вместе с основным заданием.
 
-Реализуйте возможность создания файлов и директорий, состоящих из любых печатных символов, кроме символа `/` и `'`. Пример команды, которая можно будет исполнить:
+Реализуйте возможность создания файлов и директорий, состоящих из любых печатных символов, кроме символа `/`. Пример команды, которая можно будет исполнить:
 
 ```sh
 $ touch '!@#$%^&*()-+ '
 $ ls
-'!@#$%^&*()-+ "
+'!@#$%^&*()-+ '
 ```
 
 Если вы всё сделали правильно, пройдёт тестовый набор `bonus-name`:
@@ -492,18 +497,50 @@ OK
 
 Реализуйте чтение из файлов и запись в файлы. Для этого вам понадобится структура `file_operations` не только для директорий, но и для обычных файлов.
 
-В неё вам понадобится добавить два поля — [`read`](https://elixir.bootlin.com/linux/v5.15.53/source/include/linux/fs.h#L1998) и [`write`](https://elixir.bootlin.com/linux/v5.15.53/source/include/linux/fs.h#L1999). Соответствующие функции имеют следующие сигнатуры:
+В этой структуре вам понадобится реализовать пять методов:
 
-```c
-ssize_t networkfs_read(struct file *filp, char *buffer, size_t len, loff_t *offset);
-ssize_t networkfs_write(struct file *filp, const char *buffer, size_t len, loff_t *offset);
-```
+1. [`int open(struct inode *inode, struct file *filp)`](https://github.com/torvalds/linux/blob/v6.2/include/linux/fs.h#L2107) — вызывается при открытии файла
 
-Аргументы такие:
-* `filp` — файловый дескриптор
-* `buffer` — буфер в user-space для чтения и записи соответственно
-* `len` — длина данных для записи
-* `offset` — смещение
+   - `inode` — inode открываемого файла
+   - `filp` — файловый дескриптор
+
+   Используйте этот метод, чтобы получить текущее содержимое файла с сервера и записать его в буфер. Для хранения указателя на буфер отлично подходит поле [`file->private_data`](https://github.com/torvalds/linux/blob/v6.2/include/linux/fs.h#L969).
+
+   Верните 0 в случае успеха или `-EIO` в случае ошибки.
+
+* [`ssize_t read(struct file *filp, char *buffer, size_t len, loff_t *offset)`](https://github.com/torvalds/linux/blob/v6.2/include/linux/fs.h#L2094) — вызывается для чтения некоторого фрагмента файла
+
+   - `filp` — файловый дескриптор
+   - `buffer` — буфер для записи результата
+   - `len` — максимальное количество байт для чтения
+   - `offset` — позиция, с которой нужно начинать чтение
+
+  Верните количество прочитанных байт в случае успеха или отрицательный код ошибки.
+
+  Не забудьте увеличить значение `offset` на количество прочитанных байт.
+
+* [`ssize_t write(struct file *filp, const char *buffer, size_t len, loff_t *offset)`](https://github.com/torvalds/linux/blob/v6.2/include/linux/fs.h#L2095) — вызывается для записи некоторого фрагмента файла
+
+   - `filp` — файловый дескриптор
+   - `buffer` — буфер для данных для записи
+   - `len` — размер буфера
+   - `offset` — позиция, с которой нужно начинать запись
+
+  Если `*offset + len > 512`, запишите только данные до 512 байт. Если `*offset == 512`, верните `-EDQUOT` и ничего не записывайте.
+   
+* [`int flush(struct file*, fl_owner_t id)`](https://github.com/torvalds/linux/blob/v6.2/include/linux/fs.h#L2108) — вызывается для сохранения файла
+
+   - `filp` — файловый дескриптор
+   - `id` — этот аргумент не нужно использовать
+
+   Отправьте в этот момент данные файла на сервер.
+
+* [`int release(struct file*, fl_owner_t id)`](https://github.com/torvalds/linux/blob/v6.2/include/linux/fs.h#L2109) — вызывается при закрытии всех экземпляров файла
+
+   - `filp` — файловый дескриптор
+   - `id` — этот аргумент не нужно использовать
+
+   Освободите всю память, которую вы аллоцировали.
 
 Обратите внимание, что просто так обратиться в `buffer` нельзя, поскольку он находится в user-space. Используйте [специальные функции](https://www.kernel.org/doc/htmldocs/kernel-hacking/routines-copy.html) для чтения и записи.
 
@@ -541,7 +578,7 @@ OK
 Для этого добавьте поле `link` в структуру `inode_operations`. Сигнатура соответствующей функции выглядит так:
 
 ```c
-int networkfs_link(struct dentry *old_dentry, struct inode *parent_dir, struct dentry *new_dentry);
+int networkfs_link(struct dentry *target, struct inode *parent, struct dentry *child);
 ```
 
 После реализации функции вы сможете выполнить следующие команды:
@@ -559,7 +596,7 @@ test
 $
 ```
 
-> Если вы не делали девятую часть, вы всегда можете проверить работу ссылок через запросы к серверу по HTTP: в свежесозданной ссылке будут те же данные, что и в изначальном файле. Тесты не проверяют, что вы умеете читать и писать в файлы.
+> Если вы не делали девятую часть, вы всегда можете проверить работу ссылок через команду `stat`: в свежесозданной ссылке будет тот же номер inode, что и в оригинальном файле.
 
 Если вы всё сделали правильно, пройдёт тестовый набор `bonus-link`:
 
@@ -570,3 +607,5 @@ Ran 2 tests in 1.535s
 
 OK
 ```
+
+[^1] Существует альтернативный путь — определить метод `mount` в `file_system_type`, который должен возвращать корневую директорию файловой системы, однако он считается устаревшим.
