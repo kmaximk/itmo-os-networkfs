@@ -1,7 +1,9 @@
 """Service class for preparing context manager"""
-
+import logging
 import os
 import subprocess
+import time
+
 import requests
 import json
 import urllib.parse
@@ -13,14 +15,15 @@ class NfsObject:
         r = requests.get("/".join([API_BASE, "v1", "token", "issue?json"]))
         assert r.json()['status'] == "SUCCESS", "Can't get token from the server"
         self.token = r.json()['response']
-        subprocess.run(["mount", "-t", MODULE, self.token, MOUNTPOINT], stderr=subprocess.PIPE)
-    
+        subprocess.run(["mount", "-t", MODULE, self.token, MOUNTPOINT], check=True, stderr=subprocess.PIPE)
+
     def __enter__(self):
         return self
     
     def __exit__(self, type, value, traceback):
         try:
-            subprocess.run(["umount", MOUNTPOINT], stderr=subprocess.PIPE)
+            time.sleep(0.2)
+            subprocess.run(["umount", MOUNTPOINT], check=True, stderr=subprocess.PIPE)
         except:
             logging.warning("Can't umount filesystem")
     
