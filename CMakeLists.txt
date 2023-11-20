@@ -32,9 +32,10 @@ if(NOT DEFINED KERNELHEADERS_DIR)
                 KERNELHEADERS_DIR
                 include/linux/user.h
                 PATHS /usr/src/linux-headers-${KERNEL_RELEASE})
+        
+        message(STATUS "Kernel release: ${KERNEL_RELEASE}")
 endif(NOT DEFINED KERNELHEADERS_DIR)
 
-message(STATUS "Kernel release: ${KERNEL_RELEASE}")
 message(STATUS "Kernel headers: ${KERNELHEADERS_DIR}")
 
 # Add header files
