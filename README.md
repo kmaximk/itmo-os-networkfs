@@ -426,11 +426,11 @@ int networkfs_unlink(struct inode *parent, struct dentry *child) {
 
 ```c
 int networkfs_create(struct user_namespace *user_ns, struct inode *parent, struct dentry *child, umode_t mode, bool b) {
-  const char *name = child_dentry->d_name.name;
+  const char *name = child->d_name.name;
   if (parent->i_ino == 100 && !strcmp(name, "test.txt")) {
     has_test_txt = true;
-    inode = networkfs_get_inode(parent_inode->i_sb, NULL, S_IFREG | S_IRWXUGO, 1001);
-    d_add(child_dentry, inode);
+    inode = networkfs_get_inode(parent->i_sb, NULL, S_IFREG, 1001);
+    d_add(child, inode);
   }
 
   return 0;
@@ -497,16 +497,18 @@ OK
 
 Реализуйте чтение из файлов и запись в файлы. Для этого вам понадобится структура `file_operations` не только для директорий, но и для обычных файлов.
 
-В этой структуре вам понадобится реализовать пять методов:
+В этой структуре вам понадобится реализовать шесть методов:
 
-1. [`int open(struct inode *inode, struct file *filp)`](https://github.com/torvalds/linux/blob/v6.2/include/linux/fs.h#L2107) — вызывается при открытии файла
+* [`int open(struct inode *inode, struct file *filp)`](https://github.com/torvalds/linux/blob/v6.2/include/linux/fs.h#L2107) — вызывается при открытии файла
 
    - `inode` — inode открываемого файла
    - `filp` — файловый дескриптор
 
    Используйте этот метод, чтобы получить текущее содержимое файла с сервера и записать его в буфер. Для хранения указателя на буфер отлично подходит поле [`file->private_data`](https://github.com/torvalds/linux/blob/v6.2/include/linux/fs.h#L969).
 
-   Верните 0 в случае успеха или `-EIO` в случае ошибки.
+   Верните 0 в случае успеха или соответствующий код ошибки.
+
+   В поле `filp->f_flags` хранятся флаги доступа к файлу. Поддержите один — `O_APPEND`: если он установлен, необходимо установить курсор в конец файла. Это можно сделать с помощью функции [`generic_file_llseek`](https://github.com/torvalds/linux/blob/v6.2/fs/read_write.c#L144).
 
 * [`ssize_t read(struct file *filp, char *buffer, size_t len, loff_t *offset)`](https://github.com/torvalds/linux/blob/v6.2/include/linux/fs.h#L2094) — вызывается для чтения некоторого фрагмента файла
 
@@ -519,6 +521,8 @@ OK
 
   Не забудьте увеличить значение `offset` на количество прочитанных байт.
 
+  > Обратите внимание, что просто так обратиться в `buffer` нельзя, поскольку он находится в user-space. Используйте [специальные функции](https://www.kernel.org/doc/htmldocs/kernel-hacking/routines-copy.html) для чтения и записи.
+
 * [`ssize_t write(struct file *filp, const char *buffer, size_t len, loff_t *offset)`](https://github.com/torvalds/linux/blob/v6.2/include/linux/fs.h#L2095) — вызывается для записи некоторого фрагмента файла
 
    - `filp` — файловый дескриптор
@@ -528,21 +532,44 @@ OK
 
   Если `*offset + len > 512`, запишите только данные до 512 байт. Если `*offset == 512`, верните `-EDQUOT` и ничего не записывайте.
    
-* [`int flush(struct file*, fl_owner_t id)`](https://github.com/torvalds/linux/blob/v6.2/include/linux/fs.h#L2108) — вызывается для сохранения файла
+* [`int flush(struct file* filp, fl_owner_t id)`](https://github.com/torvalds/linux/blob/v6.2/include/linux/fs.h#L2108) — вызывается для сохранения файла при закрытии  
+  [`int fsync(struct file* filp, loff_t begin, loff_t end, int datasync)`](https://github.com/torvalds/linux/blob/v6.2/include/linux/fs.h#L2110) — вызывается для сохранения открытого файла
 
    - `filp` — файловый дескриптор
-   - `id` — этот аргумент не нужно использовать
+   - `id` — владелец блокировки, игнорируйте этот аргумент
+   - `begin`, `end` — начало и конец записываемого фрагмента — игнорируйте эти аргументы и всегда пишите весь файл
+   - `datasync` — флаг, показывающий, что синхронизировать метаданные не нужно — игнорируйте этот аргумент
 
    Отправьте в этот момент данные файла на сервер.
 
-* [`int release(struct file*, fl_owner_t id)`](https://github.com/torvalds/linux/blob/v6.2/include/linux/fs.h#L2109) — вызывается при закрытии всех экземпляров файла
+* [`int release(struct inode* inode, struct file* filp)`](https://github.com/torvalds/linux/blob/v6.2/include/linux/fs.h#L2109) — вызывается при закрытии всех экземпляров файла
 
+   - `inode` — inode файла
    - `filp` — файловый дескриптор
-   - `id` — этот аргумент не нужно использовать
 
    Освободите всю память, которую вы аллоцировали.
 
-Обратите внимание, что просто так обратиться в `buffer` нельзя, поскольку он находится в user-space. Используйте [специальные функции](https://www.kernel.org/doc/htmldocs/kernel-hacking/routines-copy.html) для чтения и записи.
+Также вам понадобится метод `.llseek`. Он отвечает за перемещение текущего оффсета в файле. Реализовывать его самому не нужно, воспользуйтесь уже знакомой вам `generic_file_llseek`.
+
+Попробуйте примонтировать файловую систему. У вас возникнет проблема:
+
+```sh
+$ cat file1
+hello world from file1
+$ echo "other" > file1
+other
+world from file1
+```
+
+Чтобы её решить, вам понадобится добавить метод [`setattr`](https://github.com/torvalds/linux/blob/v6.2/include/linux/fs.h#L2158) в `inode_operations`.
+
+```c
+int networkfs_setattr(struct user_namespace *user_ns, struct dentry *entry, struct iattr *attr);
+```
+
+Этот метод в начале всегда должен вызывать функцию [`setattr_prepare`](https://github.com/torvalds/linux/blob/master/fs/attr.c#L165). Она проверяет корректность вызова. Не забудьте установить в суперблоке атрибут `s_maxbytes`, чтобы избежать слишком длинных файлов.
+
+Размер файла нужно изменить в случае, если битмаска [`iattr->ia_valid`](https://github.com/torvalds/linux/blob/master/include/linux/fs.h#L227) содержит флаг [`ATTR_OPEN`](https://github.com/torvalds/linux/blob/v6.2/include/linux/fs.h#L205). Ожидаемый новый размер файла хранится в `iattr->ia_size`.
 
 В результате вы сможете сделать вот так:
 
@@ -551,10 +578,15 @@ $ cat file1
 hello world from file1
 $ cat file2
 file2 content here
-$ echo "test" > file1
+$ echo "hello" > file1
 $ cat file1
-test
-$
+hello
+$ echo "world" >> file1
+$ cat file1
+hello
+world
+$ vim -n file1
+<откроется Vim, нажмите :q! для выхода>
 ```
 
 > Обратите внимание, что файл должен уметь содержать любые ASCII-символы с кодами от 0 до 127 включительно.

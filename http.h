@@ -14,7 +14,7 @@
 /**
  * networkfs_http_call - make a call to networkfs API.
  * @token:           Unique filesystem token.
- * @method:          API method name, e.g. "fs.list".
+ * @method:          API method name, e.g. "list" for fs.list.
  * @response_buffer: Pointer to memory space for writing the response.
  *                   There should be available at least @buffer_size bytes.
  * @arg_size:        Number of arguments provided.

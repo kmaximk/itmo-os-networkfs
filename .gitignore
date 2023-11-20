@@ -1,7 +1,3 @@
-*.cmd
-*.ko
-*.mod
-*.mod.c
-*.o
-Module.symvers
-modules.order
+build/
+/Kbuild
+tests/__pycache__/

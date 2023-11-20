@@ -42,7 +42,7 @@ class BasicTestCases(unittest.TestCase):
             expected.sort();
             actual.sort()
             self.assertEqual(expected, actual)
-    
+
     def test_list_nested_dir(self):
         """ls files in /dir directory"""
         with NfsObject() as no:
@@ -149,6 +149,20 @@ class BasicTestCases(unittest.TestCase):
                 actual = no.list("/" + dir + "/")
                 actual.sort()
                 self.assertEqual(expected, actual)
+
+    def test_create_dir_failed(self):
+        """Try to create 17th entry in root directory"""
+        with NfsObject() as no:
+            no.clear()
+            for i in range(1, 17):
+                no.create("file" + str(i), "file")
+            with self.assertRaises(OSError):
+                os.mkdir(MOUNTPOINT + "/file17")
+            expected = no.list("/")
+            actual = os.listdir(MOUNTPOINT)
+            expected.sort();
+            actual.sort()
+            self.assertEqual(expected, actual)
 
     def test_rm_file(self):
         """remove file1"""
