@@ -80,8 +80,9 @@ jobs:
       - name: "Launch tests"
         shell: 'script -q -e -c "bash {0}"'
         run: |
+          echo "::group::Booting Virtual Machine"
           qemu-system-x86_64 -kernel /opt/vmlinuz-6.2.0-31-generic -hda /opt/ubuntu.img -hdb networkfs.img -append "apparmor=0 root=/dev/sda console=ttyS0 gtest_args=\"--gtest_filter=BaseTest.*\"" -nographic -serial mon:stdio -smp 2 -m 512M | tee qemu.log
-          fgrep '[  PASSED  ]' qemu.log > /dev/null
+          ! fgrep '[  FAILED  ]' qemu.log > /dev/null
       - name: "Upload logs"
         uses: actions/upload-artifact@v3
         with:
@@ -103,8 +104,9 @@ jobs:
           name: networkfs
       - name: "Launch tests"
         run: |
+          echo "::group::Booting Virtual Machine"
           qemu-system-x86_64 -kernel /opt/vmlinuz-6.2.0-31-generic -hda /opt/ubuntu.img -hdb networkfs.img -append "apparmor=0 root=/dev/sda console=ttyS0 gtest_args=\"--gtest_filter=EncodingTest.*\"" -nographic -serial mon:stdio -smp 2 -m 512M | tee qemu.log
-          fgrep '[  PASSED  ]' qemu.log > /dev/null
+          ! fgrep '[  FAILED  ]' qemu.log > /dev/null
       - name: "Upload logs"
         uses: actions/upload-artifact@v3
         with:
@@ -126,8 +128,9 @@ jobs:
           name: networkfs
       - name: "Launch tests"
         run: |
+          echo "::group::Booting Virtual Machine"
           qemu-system-x86_64 -kernel /opt/vmlinuz-6.2.0-31-generic -hda /opt/ubuntu.img -hdb networkfs.img -append "apparmor=0 root=/dev/sda console=ttyS0 gtest_args=\"--gtest_filter=FileTest.*\"" -nographic -serial mon:stdio -smp 2 -m 512M | tee qemu.log
-          fgrep '[  PASSED  ]' qemu.log > /dev/null
+          ! fgrep '[  FAILED  ]' qemu.log > /dev/null
       - name: "Upload logs"
         uses: actions/upload-artifact@v3
         with:
@@ -149,8 +152,9 @@ jobs:
           name: networkfs
       - name: "Launch tests"
         run: |
+          echo "::group::Booting Virtual Machine"
           qemu-system-x86_64 -kernel /opt/vmlinuz-6.2.0-31-generic -hda /opt/ubuntu.img -hdb networkfs.img -append "apparmor=0 root=/dev/sda console=ttyS0 gtest_args=\"--gtest_filter=LinkTest.*\"" -nographic -serial mon:stdio -smp 2 -m 512M | tee qemu.log
-          fgrep '[  PASSED  ]' qemu.log > /dev/null
+          ! fgrep '[  FAILED  ]' qemu.log > /dev/null
       - name: "Upload logs"
         uses: actions/upload-artifact@v3
         with:
