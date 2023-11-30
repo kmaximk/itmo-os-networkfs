@@ -87,7 +87,7 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: qemu.log
-          path: build/qemu.log
+          path: qemu.log
         if: ${{ failure() }}
   bonus-encoding:
     needs: [build, tests]
@@ -111,7 +111,7 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: qemu-encoding.log
-          path: build/qemu.log
+          path: qemu.log
         if: ${{ failure() }}
   bonus-file:
     needs: [build, tests]
@@ -135,7 +135,7 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: qemu-file.log
-          path: build/qemu.log
+          path: qemu.log
         if: ${{ failure() }}
   bonus-link:
     needs: [build, tests]
@@ -159,7 +159,7 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: qemu-link.log
-          path: build/qemu.log
+          path: qemu.log
         if: ${{ failure() }}
   cleanup:
     needs: [build, tests, bonus-encoding, bonus-file, bonus-link]
