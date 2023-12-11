@@ -4,21 +4,28 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/uaccess.h>
+
 #include "http.h"
 
-    struct dentry *
-    networkfs_lookup(struct inode *parent, struct dentry *child,
-                     unsigned int flag);
+#define MAX_BYTES 512
+
+struct dentry *networkfs_lookup(struct inode *parent, struct dentry *child,
+                                unsigned int flag);
+
 struct inode *networkfs_get_inode(struct super_block *sb,
                                   const struct inode *parent, umode_t mode,
                                   int i_ino);
 
 void escape_name(char *escaped_name, const char *name);
 
-int networkfs_create(struct user_namespace *user_ns, struct inode *parent,
-                     struct dentry *child, umode_t mode, bool b);
+int remove_http_call(struct inode *parent, struct dentry *child, char *type);
 
-    struct entry_info {
+int create_http_call(struct dentry *child, struct inode *parent, umode_t mode,
+                     int type);
+
+int networkfs_save_buffer(struct file *filp);
+
+struct entry_info {
   unsigned char entry_type;  // DT_DIR (4) or DT_REG (8)
   ino_t ino;
 };
@@ -34,5 +41,5 @@ struct entries {
 
 struct content {
   __u64 content_length;
-  char content[512];
+  char content[MAX_BYTES];
 };
