@@ -149,8 +149,16 @@ char *escape_name(const char *name, size_t size) {
   if (escaped_name == NULL) {
     return NULL;
   }
+  int pos = 0;
   for (int i = 0; i < strlen(name); i++) {
-    sprintf((char *)escaped_name + 3 * i, "%%%02X", name[i]);
+    if (isalnum(name[i]) || name[i] == '-' || name[i] == '_' ||
+        name[i] == '.' || name[i] == '~') {
+      sprintf((char *)escaped_name + pos, "%c", name[i]);
+      pos++;
+    } else {
+      sprintf((char *)escaped_name + pos, "%%%02X", name[i]);
+      pos += 3;
+    }
   }
   return escaped_name;
 }
