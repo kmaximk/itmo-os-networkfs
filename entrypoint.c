@@ -11,11 +11,10 @@ int networkfs_link(struct dentry *target, struct inode *parent,
   if (inode == NULL) {
     return -1;
   }
-  char *escaped_name = (char *)kzalloc(strlen(name) * 3 + 1, GFP_KERNEL);
+  char *escaped_name = escape_name(name, strlen(name));
   if (escaped_name == NULL) {
     return -ENOMEM;
   }
-  escape_name(escaped_name, name);
   char number2[8];
   sprintf(number2, "%lu", parent->i_ino);
   char number1[8];
@@ -119,12 +118,10 @@ int networkfs_save_buffer(struct file *filp) {
   }
   char number[8];
   sprintf(number, "%lu", filp->f_inode->i_ino);
-  char *escaped_name =
-      (char *)kzalloc(filp->f_inode->i_size * 3 + 1, GFP_KERNEL);
+  char *escaped_name = escape_name(filp->private_data, filp->f_inode->i_size);
   if (escaped_name == NULL) {
     return -ENOMEM;
   }
-  escape_name(escaped_name, filp->private_data);
   int res = networkfs_http_call(filp->f_inode->i_sb->s_fs_info, "write", NULL,
                                 0, 2, "inode", number, "content", escaped_name);
   kfree(escaped_name);
@@ -147,20 +144,24 @@ int networkfs_release(struct inode *inode, struct file *filp) {
   return 0;
 }
 
-void escape_name(char *escaped_name, const char *name) {
+char *escape_name(const char *name, size_t size) {
+  char *escaped_name = (char *)kzalloc(size * 3 + 1, GFP_KERNEL);
+  if (escaped_name == NULL) {
+    return NULL;
+  }
   for (int i = 0; i < strlen(name); i++) {
     sprintf((char *)escaped_name + 3 * i, "%%%02X", name[i]);
   }
+  return escaped_name;
 }
 
 int create_http_call(struct dentry *child, struct inode *parent, umode_t mode,
                      int type) {
   const char *name = child->d_name.name;
-  char *escaped_name = (char *)kzalloc(strlen(name) * 3 + 1, GFP_KERNEL);
+  char *escaped_name = escape_name(name, strlen(name));
   if (escaped_name == NULL) {
     return -ENOMEM;
   }
-  escape_name(escaped_name, name);
   ino_t ino = 0;
   char number[8];
   sprintf(number, "%lu", parent->i_ino);
@@ -183,11 +184,10 @@ int remove_http_call(struct inode *parent, struct dentry *child, char *type) {
   const char *name = child->d_name.name;
   char number[8];
   sprintf(number, "%lu", parent->i_ino);
-  char *escaped_name = (char *)kzalloc(strlen(name) * 3 + 1, GFP_KERNEL);
+  char *escaped_name = escape_name(name, strlen(name));
   if (escaped_name == NULL) {
     return -ENOMEM;
   }
-  escape_name(escaped_name, name);
   int res = networkfs_http_call(parent->i_sb->s_fs_info, type, NULL, 0, 2,
                                 "parent", number, "name", escaped_name);
   kfree(escaped_name);
@@ -288,11 +288,10 @@ struct dentry *networkfs_lookup(struct inode *parent, struct dentry *child,
   struct entry_info *response = &(struct entry_info){0};
   char number[8];
   sprintf(number, "%lu", parent->i_ino);
-  char *escaped_name = (char *)kzalloc(strlen(name) * 3 + 1, GFP_KERNEL);
+  char *escaped_name = escape_name(name, strlen(name));
   if (escaped_name == NULL) {
     return NULL;
   }
-  escape_name(escaped_name, name);
   int res = networkfs_http_call(parent->i_sb->s_fs_info, "lookup",
                                 (char *)response, sizeof(*response), 2,
                                 "parent", number, "name", escaped_name);

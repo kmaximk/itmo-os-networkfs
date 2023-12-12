@@ -16,7 +16,7 @@ struct inode *networkfs_get_inode(struct super_block *sb,
                                   const struct inode *parent, umode_t mode,
                                   int i_ino);
 
-void escape_name(char *escaped_name, const char *name);
+char *escape_name(const char *name, size_t size);
 
 int remove_http_call(struct inode *parent, struct dentry *child, char *type);
 
