@@ -162,7 +162,7 @@ int create_http_call(struct dentry *child, struct inode *parent, umode_t mode,
   }
   escape_name(escaped_name, name);
   ino_t ino = 0;
-  char number[8] = {0};
+  char number[8];
   sprintf(number, "%lu", parent->i_ino);
   int res = networkfs_http_call(parent->i_sb->s_fs_info, "create", (char *)&ino,
                                 sizeof(ino_t), 3, "parent", number, "name",
